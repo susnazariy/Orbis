@@ -1,0 +1,83 @@
+sequenceDiagram
+    actor Student
+    actor Creator
+    participant SF as Student Frontend
+    participant CF as Creator Frontend
+    participant API as Django REST API
+    participant DB as PostgreSQL
+    participant Email as Email Service
+    participant Queue as Message Broker
+    participant Worker as Celery Worker
+
+    Student->>SF: Переглядає каталог курсів
+    SF->>API: GET /api/courses/
+    API->>DB: SELECT courses (published=true)
+    DB-->>API: courses[]
+    API-->>SF: courses[]
+    SF-->>Student: Список курсів
+    
+    Student->>SF: Натискає "Подати заявку"
+    SF->>API: POST /api/applications/
+    Note over SF,API: {course_id, student_id}
+    
+    API->>DB: INSERT application(status=pending)
+    DB-->>API: application_id
+    API-->>SF: 201 Created {application_id}
+    SF-->>Student: ✓ Заявку надіслано
+    
+    API->>Queue: Задача: notify_creator(application_id)
+    Queue->>Worker: Викликати notify_creator()
+    Worker->>DB: SELECT creator_email, student_name
+    Worker->>Email: Надіслати email creator
+    Email-->>Worker: Email sent
+    
+    Note over Creator: Отримує email про нову заявку
+    
+    Creator->>CF: Відкриває "Заявки"
+    CF->>API: GET /api/applications/?status=pending
+    API->>DB: SELECT applications
+    DB-->>API: applications[]
+    API-->>CF: applications[]
+    CF-->>Creator: Список заявок
+    
+    alt Creator приймає заявку
+        Creator->>CF: "Прийняти"
+        CF->>API: PATCH /api/applications/{id}/
+        Note over CF,API: {status: "accepted"}
+        
+        API->>DB: BEGIN TRANSACTION
+        API->>DB: UPDATE application (status=accepted)
+        API->>DB: INSERT student_courses(student, course)
+        API->>DB: COMMIT
+        DB-->>API: Success
+        
+        API->>Queue: Задача: notify_student_accepted()
+        Queue->>Worker: Викликати notify_student_accepted()
+        Worker->>Email: Надіслати email student
+        Email-->>Worker: Email sent
+        
+        API-->>CF: 200 OK
+        CF-->>Creator: ✓ Заявку прийнято
+        
+        Note over SF: Student отримує push notification
+        SF->>API: WebSocket: application_accepted
+        SF-->>Student: 🎉 Вас додано до курсу!
+        
+    else Creator відхиляє заявку
+        Creator->>CF: "Відхилити"
+        CF->>API: PATCH /api/applications/{id}/
+        Note over CF,API: {status: "rejected"}
+        
+        API->>DB: UPDATE application (status=rejected)
+        DB-->>API: Success
+        
+        API->>Queue: Задача: notify_student_rejected()
+        Queue->>Worker: Викликати notify_student_rejected()
+        Worker->>Email: Надіслати email student
+        
+        API-->>CF: 200 OK
+        CF-->>Creator: Заявку відхилено
+        
+        SF->>API: WebSocket: application_rejected
+        SF-->>Student: Заявку відхилено
+    end

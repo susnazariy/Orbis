@@ -1,0 +1,95 @@
+@startuml
+' Налаштування стилю
+skinparam packageStyle rectangle
+skinparam usecase {
+    BackgroundColor LightSteelBlue
+    BorderColor DarkSlateGray
+    FontColor Black
+    FontSize 13
+}
+skinparam actor {
+    FontName Arial
+    FontColor Black
+    FontSize 14
+}
+title Діаграма Варіантів Використання (Вертикальна Схема)
+hide empty members
+
+' --- Розміщення акторів ліворуч ---
+actor Учень as S
+actor Викладач as C
+actor Адміністратор as A
+
+' --- Визначення пакетів (Будуть розміщені вертикально) ---
+
+package "Функції Викладача" as CreatorFuncs {
+    usecase UC05 as "Управління курсами"
+    usecase UC06 as "Управління заняттями"
+    usecase UC07 as "Управління контентом"
+    usecase UC08 as "Обробка заявок студентів"
+}
+
+package "Аутентифікація та Профіль" as Auth {
+    usecase UC01 as "Реєстрація"
+    usecase UC02 as "Авторизація"
+    usecase UC03 as "Вихід із системи"
+    usecase UC04 as "Налаштування профілю"
+}
+
+package "Функції Учня" as StudentFuncs {
+    usecase UC09 as "Надсилання заявок на курс"
+    usecase UC10 as "Перегляд курсів"
+    usecase UC11 as "Проходження завдань"
+    usecase UC12 as "Проходження фінального тестування"
+    usecase UC13 as "Перегляд статистики"
+}
+
+usecase UC14 as "Управління системою (Адмін)"
+
+CreatorFuncs -down-> Auth
+Auth -down-> StudentFuncs
+UC14 -up-> Auth : "Вхід до Адмін-панелі"
+
+
+' --- Зв’язки акторів ---
+
+' Спільні для всіх
+S -- (UC01)
+S -- (UC02)
+S -- (UC03)
+S -- (UC04)
+C -- (UC01)
+C -- (UC02)
+C -- (UC03)
+C -- (UC04)
+A -- (UC02)
+A -- (UC03)
+A -- (UC04)
+
+' Зв'язки Викладача
+C --> UC05
+C --> UC06
+C --> UC07
+C --> UC08
+
+' Зв'язки Учня
+S --> UC09
+S --> UC10
+S --> UC11
+S --> UC12
+S --> UC13
+
+' Зв'язки Адміністратора
+A --> UC14
+
+' --- Включення / Розширення ---
+
+' Викладач
+UC05 ..> UC06 : <<include>>
+UC06 ..> UC07 : <<include>>
+
+' Учень
+UC11 <. UC12 : <<extend>>
+UC12 .> UC11 : <<include>>
+UC11 <. UC13 : <<extend>>
+@enduml

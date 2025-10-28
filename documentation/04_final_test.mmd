@@ -1,0 +1,68 @@
+sequenceDiagram
+    actor Student
+    participant Frontend as Vue.js Frontend
+    participant API as Django REST API
+    participant DB as PostgreSQL
+    participant Cache as Redis Cache
+
+    Student->>Frontend: Відкриває курс
+    Frontend->>API: GET /api/courses/{id}/progress/
+    API->>DB: SELECT student_progress
+    DB-->>API: {completed_lessons, total_lessons}
+    
+    alt Всі заняття завершені
+        API-->>Frontend: {final_test_available: true}
+        Frontend-->>Student: Кнопка "Фінальний тест" активна
+        
+        Student->>Frontend: "Почати фінальний тест"
+        Frontend->>API: POST /api/courses/{id}/start-final-test/
+        
+        API->>Cache: CHECK test_in_progress(student, course)
+        Cache-->>API: Not in progress
+        
+        API->>DB: SELECT questions з усіх lessons
+        DB-->>API: mixed_questions[]
+        
+        API->>API: Shuffle questions
+        API->>Cache: SET test_session (TTL 60 min)
+        API-->>Frontend: {session_id, questions[]}
+        
+        Frontend-->>Student: Відображення тесту
+        
+        loop Кожні 5 хвилин
+            Frontend->>API: POST /api/test-sessions/{id}/autosave/
+            API->>Cache: UPDATE session (answers)
+        end
+        
+        Student->>Frontend: "Завершити тест"
+        Frontend->>API: POST /api/courses/{id}/submit-final-test/
+        Note over Frontend,API: {session_id, answers[]}
+        
+        API->>API: Валідація всіх відповідей
+        API->>DB: BEGIN TRANSACTION
+        
+        API->>DB: INSERT final_test_result
+        Note over API,DB: (student, course, score, passed)
+        
+        alt score >= 80%
+            API->>DB: UPDATE student_courses (completed=true, certificate=generated)
+            API->>DB: INSERT certificate(student, course)
+            API->>DB: COMMIT
+            DB-->>API: Success
+            
+            API-->>Frontend: {passed: true, score, certificate_url}
+            Frontend-->>Student: Вітаємо! Курс завершено!
+            Frontend-->>Student: Сертифікат готовий до завантаження
+        else score < 80%
+            API->>DB: COMMIT
+            API->>Cache: SET retry_cooldown(student, course) (TTL 24h)
+            API-->>Frontend: {passed: false, score, retry_available: tomorrow}
+            Frontend-->>Student: Тест не здано. Спробуйте завтра
+        end
+        
+        API->>Cache: DELETE test_session
+        
+    else Є незавершені заняття
+        API-->>Frontend: {final_test_available: false, remaining_lessons}
+        Frontend-->>Student: Завершіть всі заняття для доступу до фінального тесту
+    end

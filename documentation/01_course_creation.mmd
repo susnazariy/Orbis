@@ -1,0 +1,51 @@
+sequenceDiagram
+    actor Creator
+    participant Frontend as Vue.js Frontend
+    participant API as Django REST API
+    participant Auth as Authentication
+    participant DB as PostgreSQL
+    participant Storage as Cloud Storage
+    participant Queue as Message Broker
+    participant Worker as Celery Worker
+
+    Creator->>Frontend: Натискає "Створити курс"
+    Frontend->>API: POST /api/courses/
+    API->>Auth: Перевірити JWT токен
+    Auth-->>API: Токен валідний, роль Creator
+    
+    API->>DB: INSERT course_data
+    DB-->>API: course_id
+    
+    API-->>Frontend: 201 Created {course_id}
+    Frontend-->>Creator: Курс створено
+    
+    Creator->>Frontend: Додає заняття
+    Frontend->>API: POST /api/courses/{id}/lessons/
+    API->>DB: INSERT lesson_data
+    DB-->>API: lesson_id
+    API-->>Frontend: 201 Created {lesson_id}
+    
+    Creator->>Frontend: Завантажує відео
+    Frontend->>API: GET /api/upload/presigned-url/
+    API->>Storage: Генерувати presigned URL
+    Storage-->>API: presigned_url (TTL 10 min)
+    API-->>Frontend: {presigned_url, file_id}
+    
+    Frontend->>Storage: PUT відео (пряме завантаження)
+    Storage-->>Frontend: 200 OK
+    
+    Frontend->>API: POST /api/lessons/{id}/video-uploaded/
+    API->>Queue: Задача: process_video(file_id)
+    Queue-->>API: Task queued
+    API-->>Frontend: 202 Accepted
+    
+    Queue->>Worker: Викликати process_video()
+    Worker->>Storage: Завантажити відео
+    Worker->>Worker: Стиснення відео
+    Worker->>Worker: Генерація thumbnail
+    Worker->>Worker: Створення preview
+    Worker->>Storage: Завантажити оброблене відео
+    Worker->>DB: UPDATE lesson (video_url, status=ready)
+    Worker->>API: WebSocket notification
+    API-->>Frontend: Відео готове
+    Frontend-->>Creator: ✓ Відео успішно оброблено

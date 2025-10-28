@@ -1,0 +1,46 @@
+@startuml
+!define RECTANGLE class
+
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+
+' Фронтенд
+
+package "Frontend (SPA)" {
+    [Frontend Application] 
+    [MVVM (Model-View-ViewModel)]
+    [Frontend Application] -- [MVVM (Model-View-ViewModel)]
+}
+
+
+' Серверна частина
+
+package "Backend (3-Tier Architecture)" {
+    [API Layer] 
+    [Business Logic Layer]
+    [Data Access Layer]
+    
+    [API Layer] -- [Business Logic Layer]
+    [Business Logic Layer] -- [Data Access Layer]
+}
+
+
+' Зовнішні компоненти
+
+package "External Components" {
+    [Database (PostgreSQL)]
+    [Cloud Storage]
+    [Worker / Background Tasks]
+    
+    [Data Access Layer] -- [Database (PostgreSQL)]
+    [Frontend Application] -- [Cloud Storage]
+    [Business Logic Layer] -- [Worker / Background Tasks]
+    [Worker / Background Tasks] -- [Cloud Storage]
+}
+
+
+' Взаємодія фронтенду з бекендом
+
+[Frontend Application] -- [API Layer]
+@enduml

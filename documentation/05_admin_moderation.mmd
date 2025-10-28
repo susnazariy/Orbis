@@ -1,0 +1,74 @@
+sequenceDiagram
+    actor Admin
+    participant Frontend as Admin Panel
+    participant API as Django REST API
+    participant DB as PostgreSQL
+    participant Log as Activity Logger
+    participant Email as Email Service
+
+    Admin->>Frontend: Відкриває "Всі курси"
+    Frontend->>API: GET /api/admin/courses/
+    API->>DB: SELECT courses (all, including unpublished)
+    DB-->>API: courses[]
+    API-->>Frontend: courses[]
+    Frontend-->>Admin: Список всіх курсів
+    
+    Admin->>Frontend: Переглядає курс
+    Frontend->>API: GET /api/admin/courses/{id}/full/
+    API->>DB: SELECT course with all lessons, content
+    DB-->>API: full_course_data
+    API-->>Frontend: full_course_data
+    Frontend-->>Admin: Повна інформація про курс
+    
+    alt Admin виявляє порушення
+        Admin->>Frontend: "Заблокувати курс"
+        Frontend->>API: PATCH /api/admin/courses/{id}/block/
+        Note over Frontend,API: {reason: "Inappropriate content"}
+        
+        API->>DB: BEGIN TRANSACTION
+        API->>DB: UPDATE courses (status=blocked, blocked_by=admin_id)
+        API->>DB: INSERT moderation_log
+        API->>DB: COMMIT
+        
+        API->>Log: Log action
+        Note over API,Log: [Admin {id}] blocked course {id}<br/>Reason: Inappropriate content
+        
+        API->>Email: Notify course creator
+        Note over API,Email: "Ваш курс заблоковано"
+        
+        API-->>Frontend: 200 OK
+        Frontend-->>Admin: ✓ Курс заблоковано
+        
+    else Admin редагує контент
+        Admin->>Frontend: Редагує опис курсу
+        Frontend->>API: PUT /api/admin/courses/{id}/
+        
+        API->>DB: UPDATE courses
+        API->>Log: Log action
+        Note over API,Log: [Admin {id}] edited course {id}
+        
+        API-->>Frontend: 200 OK
+        Frontend-->>Admin: ✓ Зміни збережено
+        
+    else Admin видаляє курс
+        Admin->>Frontend: "Видалити курс назавжди"
+        Frontend->>Frontend: Підтвердження (double-check)
+        Admin->>Frontend: Підтверджує видалення
+        
+        Frontend->>API: DELETE /api/admin/courses/{id}/
+        
+        API->>DB: BEGIN TRANSACTION
+        API->>DB: SELECT student_courses (affected students)
+        API->>DB: DELETE course (CASCADE: lessons, content, results)
+        API->>DB: INSERT deletion_log
+        API->>DB: COMMIT
+        
+        API->>Log: Log critical action
+        Note over API,Log: [CRITICAL] Admin {id} deleted course {id}<br/>Affected students: {count}
+        
+        API->>Email: Notify affected students
+        Note over API,Email: Масова розсилка через Celery
+        
+        API-->>Frontend: 200 OK
+        Frontend-->>Admin: ⚠️ Курс видалено
+    end

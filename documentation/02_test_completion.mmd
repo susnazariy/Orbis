@@ -1,0 +1,53 @@
+sequenceDiagram
+    actor Student
+    participant Frontend as Vue.js Frontend
+    participant API as Django REST API
+    participant Auth as Authentication
+    participant DB as PostgreSQL
+
+    Student->>Frontend: Відкриває заняття
+    Frontend->>API: GET /api/lessons/{id}/
+    API->>Auth: Перевірити JWT
+    Auth-->>API: Токен валідний, Student
+    
+    API->>DB: SELECT lesson, content, exercises
+    DB-->>API: lesson_data
+    API-->>Frontend: lesson_data (текст, відео, вправи)
+    Frontend-->>Student: Відображення контенту
+    
+    Student->>Student: Переглядає контент
+    Student->>Frontend: Натискає "Почати тест"
+    
+    Frontend->>API: GET /api/lessons/{id}/test/
+    API->>DB: SELECT test_questions
+    DB-->>API: questions[]
+    API-->>Frontend: questions[] (без правильних відповідей)
+    Frontend-->>Student: Відображення питань
+    
+    loop Для кожного питання
+        Student->>Frontend: Вводить відповідь
+        Frontend->>Frontend: Зберігає у state
+    end
+    
+    Student->>Frontend: "Завершити тест"
+    Frontend->>API: POST /api/lessons/{id}/submit-test/
+    Note over Frontend,API: {answers: [{q_id, answer}]}
+    
+    API->>API: Валідація відповідей
+    API->>DB: SELECT correct_answers
+    DB-->>API: correct_answers[]
+    
+    API->>API: Порівняння та підрахунок
+    Note over API: score = correct/total * 100
+    
+    API->>DB: INSERT test_result(student, lesson, score, passed)
+    DB-->>API: result_id
+    
+    alt score >= 70%
+        API->>DB: UPDATE student_progress (lesson completed)
+        API-->>Frontend: {passed: true, score, details}
+        Frontend-->>Student: ✓ Тест здано! Оцінка: {score}%
+    else score < 70%
+        API-->>Frontend: {passed: false, score, details}
+        Frontend-->>Student: ✗ Тест не здано. Спробуйте ще раз
+    end
