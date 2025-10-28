@@ -1,3 +1,3 @@
 # Orbis
 
-Multimedia Course Hosting Platform
+Multimedia Course Hosting and Management Platform
